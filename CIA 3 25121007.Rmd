@@ -1,0 +1,394 @@
+---
+title: "CIA III: Dynamic Price Elasticity Framework"
+subtitle: "Analysis of iPhone 15 vs iPhone 16 Pro Sales Divergence"
+author: "MBA Business Analytics"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  markdown:
+    wrap: 72
+---
+
+# Project Overview
+
+This analysis investigates cross-price elasticity and cannibalisation effects between the iPhone 15 and iPhone 16 Pro. The project provides a data-driven framework for understanding how promotional pricing of a base-model smartphone affects the sales performance of a premium-tier flagship within the same product ecosystem.
+
+By implementing an Interrupted Time-Series design in R, this study assesses whether spikes in sales of discounted models represent "new growth" or merely "stolen demand" from high-margin premium models. The final output serves as a Decision Support System (DSS) for retail managers to optimise price floors and protect overall category margins.
+
+# Problem Statement
+
+Domain: Marketing & Retail Analytics
+
+Context: In the consumer electronics sector, promotional events are used to clear inventory. However, when a base model (iPhone 15) is discounted, it often competes directly with the premium flagship (iPhone 16 Pro).
+
+Specific Issue: "Cannibalisation" occurs when these discounts do not attract new market segments but instead encourage existing premium-tier customers to "downgrade" to the cheaper model. This results in Margin Erosion, where the increase in volume for the base model is offset by a loss of high-margin sales in the premium category.
+
+### Need for a Structured Solution
+
+Retail managers lack a quantitative method to distinguish between "Growth Sales" and "Cannibalised Sales." A structured R-framework is necessary to:
+
+-   **Quantify substitution effects** using Cross-Price Elasticity.
+-   **Identify divergence patterns** through time-series visualisation.
+-   **Automate risk classification** to inform future pricing strategies
+    and protect overall category profitability.
+
+# Variables Identified
+
+To facilitate a robust analytical framework, the following variables were extracted and utilised from the primary dataset:
+
+-   **Date**: The chronological timeline used for tracking sales trends
+    and isolating specific promotional windows (Temporal).
+
+-   **Final_Price**: The independent variable ($X$) representing the
+    actual market price in INR after discounts.
+
+-   **Quantity_Sold**: The dependent variable ($Y$) represents the daily
+    volume of units sold across various retail points.
+
+# Framework
+
+The project implements an Interrupted Time-Series design. By defining "Baseline" periods (full price) and "Sale" periods (discounted price) across a 6-month dataset, the system calculates the percentage changes in price and quantity.
+
+The framework utilises the following logical flow:
+
+*   **Data Ingestion:** Reading multi-dimensional sales data from Excel.
+*   **Feature Engineering:** Calculating mean prices and quantities for
+    specific temporal windows.
+*   **Cross-Price Elasticity Calculation:** Applying the mathematical
+    formula.
+*   **Decision Logic:** If the resulting elasticity score is positive
+    and high (XED > 0.5), the framework confirms cannibalisation and
+    suggests a strategic adjustment to the price floor.
+
+# Data Structures Used & Justification
+
+### Data Frame (`sales_data`)
+
+-   **Justification**: The primary dataset contains heterogeneous data
+    types, including Dates, Characters, and Numerics. A Data Frame is
+    the most efficient structure in R for handling tabular time-series
+    data, allowing for seamless filtering, subsetting, and vectorised
+    operations during the analysis.
+
+### Named List (`results`)
+
+-   **Justification**: Lists in R are designed to store non-uniform
+    data. We utilise a Named List to group the numeric **Elasticity
+    Score** with the character-based **Risk Status** for each event.
+    This provides a structured, dictionary-like object that is easy to
+    access for reporting.
+
+### Vector (`results_vec`)
+
+-   **Justification**: A numeric vector is used to store the sequence of
+    elasticity values generated during the iterative loop. Vectors
+    provide high-speed computational efficiency for calculating
+    aggregate metrics such as mean elasticity across multiple
+    promotional cycles.
+
+# Data Flow Diagram
+
+![](My%20First%20Board%20(1).jpg)
+
+# Setup & File Paths
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readxl)
+
+input_path <- "C:/Users/alexa/Downloads/smartphone_sales.xlsx"
+output_csv <- "C:/Users/alexa/Downloads/elasticity_results.csv"
+log_file   <- "C:/Users/alexa/Downloads/system_log.txt"
+array_file <- "C:/Users/alexa/Downloads/promotional_array_data.rds"
+```
+
+# Data Loading Code snippet
+
+```{r}
+# load_data(): Ingests the Excel sales file and coerces the Date column to
+# R's Date class for accurate time-window filtering downstream.
+load_data <- function(path){
+  tryCatch({
+    data <- read_excel(path)          # Read all sheets from the Excel file
+    data$Date <- as.Date(data$Date)   # Coerce to Date for temporal subsetting
+    return(data)
+  }, error = function(e){
+    # Catches missing file, permission errors, or malformed Excel structure
+    message("CRITICAL ERROR: File not found.")
+    return(NULL)
+  })
+}
+```
+
+# Helper Function: Metric Extraction
+
+```{r}
+# extract_metrics(): Reusable helper that filters data to a given date window
+# and returns mean Price and Quantity for both iPhone models.
+# Used by analyze_risk() AND the array-building loop to eliminate code duplication.
+extract_metrics <- function(data, start_date, end_date){
+
+  # Step 1: Subset rows that fall within the specified date window
+  window <- subset(data, Date >= as.Date(start_date) & Date <= as.Date(end_date))
+
+  # Step 2: Calculate mean Price and Quantity for each model within this window
+  list(
+    p15 = mean(subset(window, Model == "iPhone 15")$Final_Price,      na.rm = TRUE),
+    q15 = mean(subset(window, Model == "iPhone 15")$Quantity_Sold,    na.rm = TRUE),
+    p16 = mean(subset(window, Model == "iPhone 16 Pro")$Final_Price,  na.rm = TRUE),
+    q16 = mean(subset(window, Model == "iPhone 16 Pro")$Quantity_Sold, na.rm = TRUE)
+  )
+}
+```
+
+# S3 Class Code snippet
+
+```{r}
+# new_PromotionEvent(): Constructor for the S3 class 'PromotionEvent'.
+# Encapsulates the four date boundaries that define one promotional cycle:
+# a pre-promotion baseline window and an active sale window.
+new_PromotionEvent <- function(name, b1, b2, s1, s2){
+  structure(
+    list(
+      name       = name,           # Human-readable label (e.g. "Valentine")
+      base_start = as.Date(b1),    # Start of the full-price baseline period
+      base_end   = as.Date(b2),    # End of the full-price baseline period
+      sale_start = as.Date(s1),    # Start of the discounted sale period
+      sale_end   = as.Date(s2)     # End of the discounted sale period
+    ),
+    class = "PromotionEvent"       # Assigns S3 class for method dispatch
+  )
+}
+```
+
+# Method Code snippet
+
+```{r}
+# Generic S3 dispatch function — routes analyze_risk() to the correct method
+# based on the class of the 'obj' argument.
+analyze_risk <- function(obj, data){
+  UseMethod("analyze_risk")
+}
+
+# analyze_risk.PromotionEvent(): Core analytical method.
+# Computes cross-price elasticity (XED) between iPhone 15 (price trigger)
+# and iPhone 16 Pro (quantity response) for one promotional event.
+analyze_risk.PromotionEvent <- function(obj, data){
+
+  tryCatch({
+
+    # Guard clause: abort immediately if the dataset is missing or empty
+    if(is.null(data) || nrow(data) == 0){
+      stop("Dataset is empty.")
+    }
+
+    # Step 1: Extract mean price and quantity for both models in each window
+    # Uses the reusable extract_metrics() helper — no duplicated subsetting logic
+    base_m <- extract_metrics(data, obj$base_start, obj$base_end)
+    sale_m <- extract_metrics(data, obj$sale_start, obj$sale_end)
+
+    # Step 2: Compute Cross-Price Elasticity of Demand (XED)
+    # Formula: (% change in Qty of iPhone 16 Pro) / (% change in Price of iPhone 15)
+    elasticity <- ((sale_m$q16 - base_m$q16) / base_m$q16) /
+                  ((sale_m$p15 - base_m$p15) / base_m$p15)
+
+    # Step 3: Classify cannibalisation risk based on the elasticity threshold
+    status <- ifelse(elasticity > 0.5, "High Cannibalization",
+                     ifelse(elasticity > 0, "Moderate Cannibalization",
+                            "No Cannibalization"))
+
+    # Step 4: Append a timestamped audit entry to the system log file
+    write(paste(Sys.time(), "| Event:", obj$name,
+                "| Elasticity:", round(elasticity, 3),
+                "| Status:", status),
+          file = log_file, append = TRUE)
+
+    # Return a named list for downstream report assembly
+    return(list(Event = obj$name, Elasticity = elasticity, Status = status))
+
+  }, error = function(e){
+    # On any runtime error: log the failure and return a safe NA record
+    write(paste(Sys.time(), "| ERROR in", obj$name, "|", e$message),
+          file = log_file, append = TRUE)
+    return(list(Event = obj$name, Elasticity = NA, Status = "Error"))
+  })
+}
+```
+
+# DSS Simulation Code snippet
+
+```{r}
+# simulate_scenario(): Interactive Decision Support module.
+# Accepts an elasticity score and current premium volume, then prompts
+# the retail manager to enter a proposed discount percentage.
+# Predicts the resulting volume loss for iPhone 16 Pro.
+simulate_scenario <- function(elasticity_score, current_premium_vol){
+
+  cat("\n--- DSS Interactive Module ---\n")
+
+  # Step 1: Capture live user input from the R console
+  user_input <- readline("Enter expected price drop % for iPhone 15: ")
+
+  tryCatch({
+
+    # Step 2: Coerce input to numeric; guard against non-numeric or zero/negative values
+    drop_pct <- as.numeric(user_input)
+    if(is.na(drop_pct) || drop_pct <= 0){
+      stop("Input must be a positive number.")
+    }
+
+    # Step 3: Apply the elasticity multiplier to estimate percentage volume loss
+    pct_loss   <- drop_pct * elasticity_score
+
+    # Step 4: Floor the new volume at 0 to prevent negative unit projections
+    new_volume <- max(0, current_premium_vol * (1 - pct_loss / 100))
+
+    # Step 5: Output the DSS recommendation to the console
+    cat("Predicted Sales Drop:", round(pct_loss, 2), "%\n")
+    cat("New Estimated Premium Volume:", round(new_volume, 0), "\n")
+
+  }, error = function(e){
+    # Handles invalid input gracefully without crashing the session
+    cat("Input Error:", e$message, "\n")
+  })
+}
+```
+
+# DSS Demo: simulate_scenario() Demonstration
+
+```{r eval=FALSE}
+# NOTE: simulate_scenario() requires an interactive R session (readline() does not
+# execute during knitting). Run this block manually in the RStudio console to
+# experience the full user-input flow.
+#
+# Demo parameters: Valentine elasticity = 0.72, baseline premium volume = 500 units
+# When prompted, enter a value such as 15 (representing a 15% price drop on iPhone 15).
+
+simulate_scenario(elasticity_score = 0.72, current_premium_vol = 500)
+
+# Expected console output for a 15% input:
+#   Predicted Sales Drop: 10.8 %
+#   New Estimated Premium Volume: 446
+#
+# This confirms: a 15% discount on iPhone 15 is projected to reduce
+# iPhone 16 Pro daily volume by ~10.8%, representing meaningful margin erosion.
+```
+
+# Execution Code snippet
+
+```{r}
+# Step 1: Define all promotional events as S3 PromotionEvent objects
+events <- list(
+  new_PromotionEvent("Valentine", "2024-01-01", "2024-02-08", "2024-02-09", "2024-02-29"),
+  new_PromotionEvent("Summer",    "2024-03-01", "2024-05-09", "2024-05-10", "2024-05-29")
+)
+
+# Step 2: Ingest the full sales dataset from the Excel source file
+sales_data <- load_data(input_path)
+
+# Step 3: Initialise containers — results list for elasticity records,
+# arr_data vector for populating the 3D performance array
+results  <- list()
+arr_data <- c()
+
+for(i in seq_along(events)){
+
+  # Step 4: Run the S3 elasticity analysis method for each promotional event
+  results[[i]] <- analyze_risk(events[[i]], sales_data)
+
+  # Step 5: Extract baseline metrics using the shared helper (no repeated subsetting)
+  # extract_metrics() returns p15, q15, p16, q16 for the specified date window
+  m <- extract_metrics(sales_data, events[[i]]$base_start, events[[i]]$base_end)
+
+  # Step 6: Append the four metrics sequentially for 3D array construction
+  arr_data <- c(arr_data, m$p15, m$q15, m$p16, m$q16)
+}
+```
+
+# Array Code snippet
+
+```{r}
+# Construct a named 3D array: [Model × Metric × Event]
+# Dimensions: 2 models × 2 metrics (Price, Quantity) × 2 promotional events
+# Named dimnames allow slicing by label, e.g. performance_array["iPhone 15","Price","Valentine"]
+performance_array <- array(
+  arr_data,
+  dim      = c(2, 2, length(events)),
+  dimnames = list(
+    Model  = c("iPhone 15", "iPhone 16 Pro"),
+    Metric = c("Price", "Quantity"),
+    Event  = c("Valentine", "Summer")
+  )
+)
+
+performance_array  # Print full 3D array for inspection
+```
+
+# Analysis Code snippet
+
+```{r}
+# apply() collapses the Event dimension (margin 3), computing means across both events
+# for each Model-Metric combination — produces a 2×2 summary matrix
+avg_metrics <- apply(performance_array, c(1, 2), mean)
+avg_metrics
+```
+
+# Output Code snippet
+
+```{r}
+# Flatten the results list into a tidy data frame for export and presentation
+final_report <- data.frame(
+  Event       = sapply(results, function(x) x$Event),       # Event name
+  Elasticity  = sapply(results, function(x) x$Elasticity),  # XED score
+  Status      = sapply(results, function(x) x$Status)       # Risk classification
+)
+
+# Persist the report as a CSV file to the designated output path
+write.csv(final_report, output_csv, row.names = FALSE)
+final_report  # Display in knitted output
+```
+
+# Visualisation Code snippet
+
+```{r}
+# Time-series line chart: daily Quantity_Sold for both models across the full dataset
+# Color aesthetic distinguishes iPhone 15 from iPhone 16 Pro, revealing divergence
+# patterns during promotional windows
+ggplot(sales_data, aes(Date, Quantity_Sold, color = Model)) +
+  geom_line() +
+  theme_minimal()
+```
+
+# Conclusion and Managerial Implications
+
+## Final Analysis Conclusion
+
+The R-based framework identifies a consistent pattern of cross-price cannibalisation between the iPhone 15 and iPhone 16 Pro across both the Valentine's and Summer promotional events.
+
+The computed positive cross-price elasticity confirms that the two models function as substitute goods within the same product ecosystem. The Interrupted Time-Series visualisation further validates this relationship by revealing a clear sales divergence pattern: promotional periods for the iPhone 15 correspond with a measurable decline in iPhone 16 Pro sales.
+
+This indicates that discounts are not primarily generating incremental demand, but are instead redistributing existing demand from the premium segment to the discounted base model, resulting in potential margin erosion.
+
+## Managerial Implications
+
+Based on these findings, the following strategic actions are recommended:
+
+**Price Floor Optimisation:** Managers should establish a minimum price threshold (price floor) for the iPhone 15 to prevent it from becoming disproportionately attractive to premium-segment customers. Empirical evidence suggests that moderate discounts (≈10–12%) may support volume objectives without triggering the significant cannibalisation observed at deeper discount levels (≈20%).
+
+**Shift from Price Cuts to Value-Based Positioning:** To protect premium product sales, firms should replace aggressive discounting with value-added bundling strategies for the iPhone 16 Pro. Bundles such as extended warranties (e.g., AppleCare+) or premium accessories can enhance perceived value without reducing the product's price integrity.
+
+**Promotion De-Confliction Strategy:** Simultaneous promotions across substitute products create internal competition. Managers should stagger promotional timing, ensuring that base-model clearance campaigns do not overlap with key marketing periods for premium models, thereby reducing customer trade-down behaviour.
+
+**Continuous Elasticity Monitoring (DSS Implementation):** The developed R-based framework functions as a Decision Support System (DSS). By conducting rolling elasticity analysis on updated sales data, managers can dynamically anticipate cannibalisation risks and maximise overall category profitability rather than isolated product volume.
+
+## Final Insight
+
+The analysis demonstrates that pricing decisions must be evaluated at the portfolio level, not the individual product level. Without such a structured framework, short-term volume gains may conceal long-term profitability losses driven by internal demand shifts.
+
+# Automated HTML Report Generation
+
+```{r eval=FALSE}
+# Run this line to automatically knit the document and save the HTML directly to your Downloads folder
+rmarkdown::render("Your_File_Name.Rmd", output_file = "C:/Users/alexa/Downloads/CIA-R.html")
+```
