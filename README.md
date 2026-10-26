@@ -1,31 +1,46 @@
-# Dynamic-Price-Elasticity-R
-R-based Decision Support System (DSS) using Interrupted Time-Series design to quantify cross-price cannibalization in consumer electronics.
 # Dynamic Price Elasticity & Cannibalization Framework (R)
 
-## 📌 Business Challenge
-In the consumer electronics sector, promotional events are frequently used to clear base-model inventory. However, discounting a base model (e.g., iPhone 15) often competes directly with the premium flagship (e.g., iPhone 16 Pro). Retail managers lack a quantitative method to distinguish between true **"Growth Sales"** and **"Cannibalized Sales"**—where discounts merely encourage existing premium-tier customers to downgrade, resulting in severe **Margin Erosion**.
+An R decision-support tool that uses an interrupted time-series design and cross-price elasticity to tell real growth from cannibalised sales when a base-model smartphone is discounted.
 
-## 🎯 Project Objective
-This project implements an **Interrupted Time-Series design** in R to provide a data-driven Decision Support System (DSS) for retail managers. It evaluates whether spikes in discounted model sales represent new growth or stolen demand from high-margin premium models.
+## Business challenge
+Discounting a base model (iPhone 15) to clear inventory can pull customers away from the premium flagship (iPhone 16 Pro). Retail managers need a way to separate **growth sales** from **cannibalised sales**, where the discount simply moves premium buyers down-tier and erodes margin.
 
-## ⚙️ Analytical Framework & Methodology
-The system calculates the percentage changes in price and quantity across defined "Baseline" (full price) and "Sale" (discounted) periods.
-* **Cross-Price Elasticity of Demand (XED):** Quantifies substitution effects. 
+## Approach
+- **Interrupted time-series design:** compares *Baseline* (full price) and *Sale* (discounted) windows for each promotional event.
+- **Cross-price elasticity of demand (XED):**
+
   $$XED = \frac{\% \Delta Q_{premium}}{\% \Delta P_{base}}$$
-* **Object-Oriented R:** Utilized custom S3 classes (`PromotionEvent`) and method dispatch to cleanly encapsulate promotional date boundaries and automate risk analysis across multiple events.
-* **Interactive DSS Simulation:** Includes a console-based simulation module (`simulate_scenario`) allowing managers to input proposed discount percentages and immediately forecast premium volume loss.
 
-## 📊 Key Findings
-The framework identified a consistent pattern of cross-price cannibalization across both the **Valentine's** and **Summer** promotional events. 
-* **XED > 0.5** confirmed high cannibalization risk, proving the two models function as substitute goods within the same ecosystem. 
-* Time-series visualization validated a clear sales divergence pattern: promotional periods for the base model correspond with a measurable decline in premium sales.
+  XED above 0.5 is treated as high cannibalisation risk.
+- **Object-oriented R:** an S3 class (`PromotionEvent`) with an `analyze_risk()` method, so new promotions are analysed with one call.
+- **What-if simulation:** `simulate_scenario()` lets a manager enter a proposed discount and see the expected premium volume loss.
 
-## 💡 Strategic Recommendations
-1. **Price Floor Optimization:** Establish a strict minimum price threshold (~10-12% maximum discount) for the base model to prevent it from becoming disproportionately attractive to premium-segment customers.
-2. **Value-Based Positioning:** Replace aggressive discounting with value-added bundling (e.g., AppleCare+, premium accessories) for the flagship to protect price integrity.
-3. **Promotion De-Confliction:** Stagger promotional timing to ensure base-model clearance campaigns do not overlap with key marketing periods for premium models.
+## Key findings
+- Both the **Valentine's** and **Summer** promotions showed **XED > 0.5**, so the two models behave as substitutes.
+- The time series shows premium sales falling during base-model promotions.
 
-## 💻 Tech Stack
-* **Language:** R
-* **Libraries:** `dplyr` (data manipulation), `ggplot2` (time-series visualization), `readxl` (data ingestion)
-* **Outputs:** RMarkdown, HTML, PDF
+## Recommendations
+1. **Price floor:** cap base-model discounts at roughly 10–12%.
+2. **Add value instead of cutting price:** bundle accessories or AppleCare+ with the flagship.
+3. **De-conflict promotions:** avoid running base-model clearance during key flagship marketing periods.
+
+## Repository structure
+```
+├── price_elasticity_dss.Rmd        # Main framework: S3 class, XED, simulation
+├── price_elasticity_dss.html       # Knitted output
+├── cannibalization_eda.Rmd         # Earlier exploratory analysis of the same data
+├── price_elasticity_report.pdf     # Written report
+└── data/
+    └── smartphone_sales.xlsx       # Daily sales and prices, iPhone 15 and 16 Pro
+```
+
+## How to run
+Open the folder in RStudio (working directory = repository root):
+```r
+install.packages(c("readxl", "dplyr", "ggplot2", "rmarkdown"))
+rmarkdown::render("price_elasticity_dss.Rmd")
+```
+Result files (elasticity table, log, saved arrays) are written to `outputs/`.
+
+## Tech stack
+R · dplyr · ggplot2 · readxl · R Markdown

@@ -16,13 +16,13 @@ library(dplyr)
 library(ggplot2)
 library(readxl)
 
-setwd("C:\\Users\\alexa\\OneDrive\\ドキュメント\\R EDA")
+# Run from the repository root; data lives in data/
 ```
 
 # 2. Data Loading
 
 ```{r}
-sales_data <- read_excel("smartphone_sales.xlsx")
+sales_data <- read_excel("data/smartphone_sales.xlsx")
 sales_data$Date <- as.Date(sales_data$Date)
 head(sales_data)
 ```

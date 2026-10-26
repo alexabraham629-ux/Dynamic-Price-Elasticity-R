@@ -97,10 +97,11 @@ library(dplyr)
 library(ggplot2)
 library(readxl)
 
-input_path <- "C:/Users/alexa/Downloads/smartphone_sales.xlsx"
-output_csv <- "C:/Users/alexa/Downloads/elasticity_results.csv"
-log_file   <- "C:/Users/alexa/Downloads/system_log.txt"
-array_file <- "C:/Users/alexa/Downloads/promotional_array_data.rds"
+input_path <- "data/smartphone_sales.xlsx"
+output_csv <- "outputs/elasticity_results.csv"
+log_file   <- "outputs/system_log.txt"
+array_file <- "outputs/promotional_array_data.rds"
+dir.create("outputs", showWarnings = FALSE)
 ```
 
 # Data Loading Code snippet
@@ -389,6 +390,6 @@ The analysis demonstrates that pricing decisions must be evaluated at the portfo
 # Automated HTML Report Generation
 
 ```{r eval=FALSE}
-# Run this line to automatically knit the document and save the HTML directly to your Downloads folder
-rmarkdown::render("Your_File_Name.Rmd", output_file = "C:/Users/alexa/Downloads/CIA-R.html")
+# Run this line to knit the document to HTML next to the .Rmd
+rmarkdown::render("price_elasticity_dss.Rmd")
 ```
